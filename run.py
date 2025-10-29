@@ -30,7 +30,7 @@ API_TOKEN = '6601937260:AAHHoZOntirOMryKbBsws5ukO9OqJpzyTuo'
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg', '02j61_VBQhxPGg21wPHh3hP_knvV2t2oshg3yc1Ci7SUfuMYSm-afV_VKUBq4lia530468ho0nPRyCYcNg92YhhR2kDg8', '02PIllMqo68kATt3yTO2fgQaX6GR93p5sfWp3MjHebCdWA82rSGKGeBc_emzWm10raufa_iEIq81d_r-5RycCMkN8bX-8']
+tokens = ['02kzUs5dor1qOwg3F_XOpJ3dC-wb13gr079k5wDhiq1YqfQqC_f3O2UbZa4zQhK0-5ZFJQV1Y30F15XgbyJ-COurgwuGs', '02ZP2rogy3lSAcPvicXKYk4M0qXXbcQitdoSsYGUn2UqV-jeVobm8Q3R5Oyvqm3zBpYGpLdjBJWrMn4IgUSPdrQY2u4hU', '02o_3V-zuLWc7eAoOi7SOcKIpNKZWEQ5KLpGZwkZQEqrDb_xMy_5uldy4w3sh92h6N-csn91LuP6ucQjGgEltldOZIaP0', '029yS4UXawF1bnK7ohEr4sLowYoBjwaiF8DEGEFSneONIRfKBBxiaDXNmw0oeHAXoVDTYVIjf8DEVn4OW8LDyo_Fcw6Ec']
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 ogg_path = os.path.join(DATA_DIR, 'add.ogg')
