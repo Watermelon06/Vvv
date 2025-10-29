@@ -164,6 +164,17 @@ async def menu_or_balance_handler(message: Message):
     await message.answer(text)
 
 
+async def reset_all_users_time(default_time: int = 1800):
+    async with async_session() as session:
+        await session.execute(update(User).values(time=default_time))
+        await session.commit()
+
+@dp.message(AdminProtect(), Command('reset_time'))
+async def reset_time_command(message: Message):
+    await reset_all_users_time()
+    await message.answer("⏳ Время у всех пользователей успешно сброшено до 30 минут.")
+
+
 @dp.message(Command('buy'))
 async def buy_pro(message: Message):
     await message.answer('Пока что функция быстрой оплаты в разработке, для оплаты напиши мне в лс @vikwo2pps')
