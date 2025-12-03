@@ -6,6 +6,7 @@ import random
 import asyncio
 import logging
 import aiohttp
+from openai import OpenAI
 import aiosqlite
 from pydub import AudioSegment
 from aiogram import Bot, Dispatcher, F
@@ -18,7 +19,7 @@ from aiogram.types import InlineKeyboardButton, FSInputFile, CallbackQuery, Repl
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import BigInteger, select, update, delete
+from sqlalchemy import BigInteger, Text, select, update, delete
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy import func
@@ -27,26 +28,18 @@ from moviepy.editor import VideoFileClip
 
 ADMINS = [7281169403]
 API_TOKEN = '6601937260:AAHHoZOntirOMryKbBsws5ukO9OqJpzyTuo'
+key = "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"
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-tokens = ['02kzUs5dor1qOwg3F_XOpJ3dC-wb13gr079k5wDhiq1YqfQqC_f3O2UbZa4zQhK0-5ZFJQV1Y30F15XgbyJ-COurgwuGs', '02ZP2rogy3lSAcPvicXKYk4M0qXXbcQitdoSsYGUn2UqV-jeVobm8Q3R5Oyvqm3zBpYGpLdjBJWrMn4IgUSPdrQY2u4hU', '02o_3V-zuLWc7eAoOi7SOcKIpNKZWEQ5KLpGZwkZQEqrDb_xMy_5uldy4w3sh92h6N-csn91LuP6ucQjGgEltldOZIaP0', '029yS4UXawF1bnK7ohEr4sLowYoBjwaiF8DEGEFSneONIRfKBBxiaDXNmw0oeHAXoVDTYVIjf8DEVn4OW8LDyo_Fcw6Ec']
+tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec']
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 ogg_path = os.path.join(DATA_DIR, 'add.ogg')
-db_path = os.path.join(DATA_DIR, 'db.sqlite3')
 BASE_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data')
 
-
-
-# Создаем папки, если они не существуют
-os.makedirs(os.path.dirname(db_path), exist_ok=True)
-# Создаем файл базы данных, если он не существует
-if not os.path.exists(db_path):
-    with open(db_path, 'w'):
-        pass
-
-DATABASE_URL = f'sqlite+aiosqlite:///{db_path}'
+# DATABASE_URL = f'sqlite+aiosqlite:///{db_path}'
+DATABASE_URL = f'postgresql+asyncpg://postgres:Fedor2009@db.vpljycblkqubqmjkjxsl.supabase.co:5432/postgres'
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 async_session = async_sessionmaker(engine)
@@ -82,6 +75,14 @@ class User(Base):
     pro: Mapped[int] = mapped_column(default=0, nullable=False)
 
 
+class Transcription(Base):
+    __tablename__ = 'transcriptions'
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    message_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    original_text: Mapped[str] = mapped_column(Text, nullable=False)
+
 
 async def async_main():
     async with engine.begin() as conn:
@@ -99,6 +100,7 @@ async def create_user(tg_id, username):
 
 
 async def add_usage(tg_id, usage):
+    tg_id = int(tg_id)
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.tg_id == tg_id))
         if user.pro==1:
@@ -142,12 +144,12 @@ async def start(message: Message):
     await message.answer(
         'Нет Telegram premium🚀? Не беда! Просто Отправь мне аудио или видео(кружочек) для перевода в текстовый вариант 📝 😉', 
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Меню')]], resize_keyboard=True))
-    await create_user(message.from_user.id, str(message.from_user.username))
+    await create_user(int(message.from_user.id), str(message.from_user.username))
 
 
 @dp.message(or_f(Command("menu"), F.text.lower() == 'меню'))
 async def menu_or_balance_handler(message: Message):
-    user = await get_user(message.from_user.id)
+    user = await get_user(int(message.from_user.id))
 
     if not user:
         await message.answer("Не удалось найти ваш профиль. Нажмите /start для регистрации.")
@@ -162,17 +164,6 @@ async def menu_or_balance_handler(message: Message):
         text += f"\n🔴 У вас обычный доступ.\nУ вас осталось в этом месяце: {times//60} мин. {times%60} сек. \n\n❗Чтобы получить PRO — нажмите /buy\n\n В бесплатной версии дается 30 минут каждый месяц 1-го числа. 🤑 PRO доступ - доступ к переводу голосовых в текст без ограничений по времени и длительности аудио. Стоимость 40 р/мес"
 
     await message.answer(text)
-
-
-async def reset_all_users_time(default_time: int = 1800):
-    async with async_session() as session:
-        await session.execute(update(User).values(time=default_time))
-        await session.commit()
-
-@dp.message(AdminProtect(), Command('reset_time'))
-async def reset_time_command(message: Message):
-    await reset_all_users_time()
-    await message.answer("⏳ Время у всех пользователей успешно сброшено до 30 минут.")
 
 
 @dp.message(Command('buy'))
@@ -303,17 +294,7 @@ async def add_token(message: Message, state: FSMContext):
 async def full_edit_tokens(message: Message):
     global tokens
     tokens = [t.strip().strip("'").strip('"') for t in message.text[1:-1].split(',')]
-    await message.answer(f'Токены обновлены. Текущий список: {tokens}')
-
-
-@dp.message(AdminProtect(), Command('get_db'))
-async def get_db(message: Message, bot: Bot):
-    database = FSInputFile(
-        os.path.abspath(db_path),
-        filename='db.sqlite3'
-    )
-    await message.answer_document(database)
-    
+    await message.answer(f'Токены обновлены. Текущий список: {tokens}')    
 
 
 async def download_file(session: aiohttp.ClientSession, file_url: str, id_file: str, file_extension: str):
@@ -373,6 +354,86 @@ async def download_and_transcribe(bot: Bot, file_id: str, token: str, id_file: s
     return transcript_text
 
 
+async def summarize_text(mess):
+    user_message = f'Перед тобой сообщение. перепиши его коротко, сохраняя суть, но при этом не изменяй текст сильно. Сверху не делай никакого заголовка: {mess}'
+    client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=key,
+    )
+    def answer(user_message):
+        try:
+            completion = client.chat.completions.create(
+                extra_headers={
+                    "HTTP-Referer": "<YOUR_SITE_URL>",  # Optional. Site URL for rankings on openrouter.ai.
+                    "X-Title": "<YOUR_SITE_NAME>",  # Optional. Site title for rankings on openrouter.ai.
+                },
+                extra_body={},
+                model="openai/gpt-oss-20b:free",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
+                ]
+            )
+            return completion.choices[0].message.content
+        except:
+            return 'Что-то пошло не так, попробуйте еще раз'
+
+    
+    loop = asyncio.get_event_loop()
+    transcript_text = await loop.run_in_executor(None, answer, user_message)
+    return transcript_text
+
+
+@dp.callback_query(F.data.startswith("summarize_"))
+async def summarize_callback(callback: CallbackQuery):
+    transcription_id = int(callback.data.split("_")[1])
+    
+    async with async_session() as session:
+        transcription = await session.get(Transcription, transcription_id)
+        
+        if not transcription or str(callback.from_user.id) != transcription.user_id:
+            await callback.answer("Ошибка доступа!")
+            return
+        
+        await callback.answer("Сокращаем текст...")
+        
+        # Запрос к ChatGPT для сокращения
+        summary = await summarize_text(transcription.original_text)
+
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(
+                text="Исходный текст", 
+                callback_data=f"full_version_{transcription_id}"
+            )
+        # Отправка результата
+        await callback.message.edit_text(
+            f"🔍 Краткая версия:\n\n{summary}",
+            reply_to_message_id=transcription.message_id,
+            reply_markup=keyboard.as_markup()
+        )
+
+
+
+@dp.callback_query(F.data.startswith("full_version_"))
+async def summarize_callback(callback: CallbackQuery):
+    transcription_id = int(callback.data.split("_")[2])
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(
+                text="Сократить текст", 
+                callback_data=f"summarize_{transcription_id}"
+            )
+    async with async_session() as session:
+        transcription = await session.get(Transcription, transcription_id)
+        
+        if not transcription or str(callback.from_user.id) != transcription.user_id:
+            await callback.answer("Ошибка доступа!")
+            return
+        
+        await callback.message.edit_text(transcription.original_text, reply_markup=keyboard.as_markup())
+
+
 @dp.message(F.voice)
 async def handle_audio_message(message: Message, bot: Bot):
     global tokens
@@ -380,16 +441,46 @@ async def handle_audio_message(message: Message, bot: Bot):
         if len(i) > 2:
             token = i
     await message.answer('Уже обрабатываю, подожди немного...')
-    await create_user(message.from_user.id, str(message.from_user.username))
     num_file = str(message.from_user.id) + str(random.randint(1, 999999))
     voice_file_id = message.voice.file_id
     try:
         transcript_text = await download_and_transcribe(bot, voice_file_id, token, str(num_file), 'ogg')
-        if len(transcript_text)<4096:
-            await message.reply(transcript_text)
-        else:
-            for i in range(int(len(transcript_text)//4096)+1):
-                await message.answer(transcript_text[i*4096:(i+1)*4096])
+        # Сохраняем транскрипцию в базу
+        async with async_session() as session:
+            transcription = Transcription(
+                user_id=str(message.from_user.id),
+                message_id=0,  # Временно, обновим после отправки
+                original_text=transcript_text
+            )
+            session.add(transcription)
+            await session.commit()
+            await session.refresh(transcription)
+            
+            # Отправка сообщения с кнопкой
+            keyboard = InlineKeyboardBuilder()
+            keyboard.button(
+                text="Сократить текст", 
+                callback_data=f"summarize_{transcription.id}"
+            )
+            
+            if len(transcript_text) < 4096:
+                msg = await message.reply(
+                    transcript_text, 
+                    reply_markup=keyboard.as_markup()
+                )
+            else:
+                # Для длинных текстов: последнее сообщение с кнопкой
+                parts = [transcript_text[i:i+4000] for i in range(0, len(transcript_text), 4000)]
+                for part in parts[:-1]:
+                    await message.reply(part)
+                msg = await message.reply(
+                    parts[-1], 
+                    reply_markup=keyboard.as_markup()
+                )
+            
+            # Обновляем ID сообщения в базе
+            transcription.message_id = int(msg.message_id)
+            await session.commit()
     except TelegramBadRequest:
         await message.reply('Текст в этом аудио отсутствует')
 
@@ -404,8 +495,43 @@ async def handle_video_message(message: Message):
     video_file_id = message.video_note.file_id
     num_file = str(message.from_user.id) + str(random.randint(1, 999999))
     try:
-        transcript_text = await download_and_transcribe(bot, video_file_id, token, num_file, 'mp4')
-        await message.reply(transcript_text)
+        transcript_text = await download_and_transcribe(bot, video_file_id, token, str(num_file), 'mp4')
+        # Сохраняем транскрипцию в базу
+        async with async_session() as session:
+            transcription = Transcription(
+                user_id=message.from_user.id,
+                message_id=0,  # Временно, обновим после отправки
+                original_text=transcript_text
+            )
+            session.add(transcription)
+            await session.commit()
+            await session.refresh(transcription)
+            
+            # Отправка сообщения с кнопкой
+            keyboard = InlineKeyboardBuilder()
+            keyboard.button(
+                text="Сократить текст", 
+                callback_data=f"summarize_{transcription.id}"
+            )
+            
+            if len(transcript_text) < 4096:
+                msg = await message.reply(
+                    transcript_text, 
+                    reply_markup=keyboard.as_markup()
+                )
+            else:
+                # Для длинных текстов: последнее сообщение с кнопкой
+                parts = [transcript_text[i:i+4000] for i in range(0, len(transcript_text), 4000)]
+                for part in parts[:-1]:
+                    await message.reply(part)
+                msg = await message.reply(
+                    parts[-1], 
+                    reply_markup=keyboard.as_markup()
+                )
+            
+            # Обновляем ID сообщения в базе
+            transcription.message_id = msg.message_id
+            await session.commit()
     except TelegramBadRequest:
         await message.reply('Текст в этом аудио отсутствует')
 
